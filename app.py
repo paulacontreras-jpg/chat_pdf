@@ -8,7 +8,6 @@ from PyPDF2 import PdfReader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, OpenAI
 from langchain_community.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
 
 
 # ============================================================
@@ -60,17 +59,18 @@ st.markdown("""
         color: #183B56;
     }
 
-    /* Sidebar */
+    /* Barra lateral */
     [data-testid="stSidebar"] {
         background-color: #D6ECFF;
     }
 
+    [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
         color: #0B4F8A;
     }
 
-    /* Zona para subir PDF */
+    /* Cargador de PDF */
     [data-testid="stFileUploader"] {
         background-color: #FFFFFF;
         border: 2px dashed #4A90E2;
@@ -78,7 +78,7 @@ st.markdown("""
         padding: 15px;
     }
 
-    /* Caja de preguntas */
+    /* Caja de pregunta */
     textarea {
         border: 2px solid #4A90E2 !important;
         border-radius: 12px !important;
@@ -100,7 +100,7 @@ st.markdown("""
         color: white;
     }
 
-    /* Mensajes */
+    /* Alertas */
     [data-testid="stAlert"] {
         border-radius: 12px;
     }
@@ -146,11 +146,15 @@ st.markdown(
 # ============================================================
 
 try:
+
     image = Image.open("Chat_pdf.png")
     st.image(image, width=350)
 
 except Exception as e:
-    st.warning(f"No se pudo cargar la imagen: {e}")
+
+    st.warning(
+        f"No se pudo cargar la imagen: {e}"
+    )
 
 
 # ============================================================
@@ -174,12 +178,12 @@ with st.sidebar:
 
     st.divider()
 
-    st.write("🐸 **Tecnología:** RAG")
+    st.write("🐸 **Tecnología: RAG**")
 
     st.write(
-        "El sistema busca información relevante dentro del "
-        "documento y utiliza inteligencia artificial para "
-        "generar la respuesta."
+        "El sistema busca primero información relevante dentro "
+        "del documento y después utiliza inteligencia artificial "
+        "para generar la respuesta."
     )
 
     st.divider()
@@ -245,11 +249,12 @@ if pdf is not None and ke:
             page_text = page.extract_text()
 
             if page_text:
+
                 text += page_text + "\n"
 
 
         # ========================================================
-        # COMPROBAR TEXTO
+        # COMPROBAR SI SE EXTRAYO TEXTO
         # ========================================================
 
         if not text.strip():
@@ -280,7 +285,7 @@ if pdf is not None and ke:
 
 
         # ========================================================
-        # DIVIDIR TEXTO EN FRAGMENTOS
+        # DIVIDIR EL TEXTO
         # ========================================================
 
         text_splitter = CharacterTextSplitter(
@@ -298,10 +303,12 @@ if pdf is not None and ke:
 
 
         # ========================================================
-        # CREAR EMBEDDINGS Y BASE DE DATOS
+        # CREAR EMBEDDINGS Y BASE DE CONOCIMIENTO
         # ========================================================
 
-        with st.spinner("🧠 Analizando el documento..."):
+        with st.spinner(
+            "🧠 Analizando el documento..."
+        ):
 
             embeddings = OpenAIEmbeddings()
 
@@ -339,6 +346,10 @@ if pdf is not None and ke:
 
         if user_question.strip():
 
+            # ====================================================
+            # BUSCAR INFORMACIÓN
+            # ====================================================
+
             with st.spinner(
                 "🔍 Buscando información en el PDF..."
             ):
@@ -352,22 +363,21 @@ if pdf is not None and ke:
 
 
             # ====================================================
-            # FILTRAR FRAGMENTOS
+            # FILTRAR RESULTADOS
             # ====================================================
 
             docs = []
 
             for doc, score in docs_with_scores:
 
-                # En FAISS, un valor menor significa
-                # mayor similitud.
+                # Menor distancia = mayor similitud
                 if score < 0.8:
 
                     docs.append(doc)
 
 
             # ====================================================
-            # NO SE ENCONTRÓ INFORMACIÓN SUFICIENTE
+            # NO SE ENCONTRÓ INFORMACIÓN
             # ====================================================
 
             if not docs:
@@ -378,7 +388,7 @@ if pdf is not None and ke:
                 )
 
                 st.info(
-                    "💡 Intenta formular una pregunta sobre "
+                    "💡 Intenta realizar una pregunta sobre "
                     "el contenido del documento."
                 )
 
@@ -396,7 +406,7 @@ if pdf is not None and ke:
 
 
                 # =================================================
-                # MODELO DE OPENAI
+                # CREAR MODELO
                 # =================================================
 
                 llm = OpenAI(
@@ -406,38 +416,50 @@ if pdf is not None and ke:
 
 
                 # =================================================
-                # CADENA DE PREGUNTAS Y RESPUESTAS
+                # CREAR CONTEXTO
                 # =================================================
 
-                chain = load_qa_chain(
-                    llm,
-                    chain_type="stuff"
+                context = "\n\n".join(
+                    [
+                        doc.page_content
+                        for doc in docs
+                    ]
                 )
 
 
                 # =================================================
-                # INSTRUCCIÓN
+                # PROMPT
                 # =================================================
 
-                prompt = f"""
-Responde la pregunta del usuario utilizando ÚNICAMENTE
-la información contenida en los fragmentos proporcionados
-del PDF.
+                final_prompt = f"""
+Responde la pregunta utilizando ÚNICAMENTE
+la información proporcionada en el contexto.
 
-REGLAS:
+REGLAS IMPORTANTES:
 
 1. No utilices información externa al PDF.
 2. No inventes información.
 3. No completes información utilizando conocimientos propios.
-4. Si la respuesta no aparece o no puede determinarse
-   a partir de los fragmentos proporcionados, responde:
+4. Si la respuesta no aparece en el contexto,
+   debes indicarlo.
+5. Si la pregunta no está relacionada con el documento,
+   no la respondas.
 
-"No puedo responder esta pregunta porque la información
-necesaria no aparece en el PDF."
+Si no existe información suficiente para responder,
+responde exactamente:
 
-Pregunta del usuario:
+"No puedo responder esta pregunta porque
+la información necesaria no aparece en el PDF."
+
+CONTEXTO DEL PDF:
+
+{context}
+
+PREGUNTA DEL USUARIO:
 
 {user_question}
+
+RESPUESTA:
 """
 
 
@@ -449,9 +471,8 @@ Pregunta del usuario:
                     "🤖 Generando respuesta..."
                 ):
 
-                    response = chain.run(
-                        input_documents=docs,
-                        question=prompt
+                    response = llm.invoke(
+                        final_prompt
                     )
 
 
@@ -483,7 +504,9 @@ Pregunta del usuario:
             f"❌ Ocurrió un error al procesar el PDF: {str(e)}"
         )
 
-        with st.expander("🔧 Ver detalles técnicos"):
+        with st.expander(
+            "🔧 Ver detalles técnicos"
+        ):
 
             import traceback
 
@@ -493,19 +516,26 @@ Pregunta del usuario:
 
 
 # ============================================================
-# SI HAY PDF PERO NO HAY API KEY
+# PDF SIN API KEY
 # ============================================================
 
 elif pdf is not None and not ke:
 
     st.warning(
-        "🔑 Para comenzar, primero ingresa tu clave de API de OpenAI."
+        "🔑 Para comenzar, primero ingresa tu clave "
+        "de API de OpenAI."
     )
 
 
 # ============================================================
-# SI TODAVÍA NO HAY PDF
+# SIN PDF
 # ============================================================
+
+else:
+
+    st.info(
+        "📄 Carga un archivo PDF para comenzar."
+    )
 
 else:
 
