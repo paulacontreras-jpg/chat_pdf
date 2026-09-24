@@ -1,13 +1,14 @@
 import os
+import platform
+
 import streamlit as st
 from PIL import Image
 from PyPDF2 import PdfReader
+
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.llms import OpenAI
+from langchain_openai import OpenAIEmbeddings, OpenAI
+from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
-import platform
 
 
 # ============================================================
@@ -64,7 +65,6 @@ st.markdown("""
         background-color: #D6ECFF;
     }
 
-    [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
         color: #0B4F8A;
@@ -112,6 +112,8 @@ st.markdown("""
         border-radius: 15px;
         border-left: 5px solid #1261A0;
         margin-top: 15px;
+        color: #183B56;
+        line-height: 1.6;
     }
 
     /* Texto pequeño */
@@ -138,8 +140,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.write("")
-
 
 # ============================================================
 # IMAGEN
@@ -148,6 +148,7 @@ st.write("")
 try:
     image = Image.open("Chat_pdf.png")
     st.image(image, width=350)
+
 except Exception as e:
     st.warning(f"No se pudo cargar la imagen: {e}")
 
@@ -168,17 +169,23 @@ with st.sidebar:
 
     st.info(
         "💡 Consejo\n\n"
-        "Haz preguntas relacionadas con el contenido del PDF."
+        "Realiza preguntas relacionadas con el contenido del PDF."
     )
 
     st.divider()
 
-    st.write("🐸 **RAG:** Recuperación Aumentada por Generación")
+    st.write("🐸 **Tecnología:** RAG")
 
     st.write(
-        "El sistema busca primero información relevante dentro "
-        "del documento y después utiliza la IA para construir "
-        "la respuesta."
+        "El sistema busca información relevante dentro del "
+        "documento y utiliza inteligencia artificial para "
+        "generar la respuesta."
+    )
+
+    st.divider()
+
+    st.caption(
+        f"Versión de Python: {platform.python_version()}"
     )
 
 
@@ -195,10 +202,13 @@ ke = st.text_input(
 )
 
 if ke:
+
     os.environ["OPENAI_API_KEY"] = ke
+
 else:
+
     st.warning(
-        "⚠️ Ingresa tu clave de API de OpenAI para utilizar el asistente."
+        "⚠️ Ingresa tu clave de API de OpenAI para continuar."
     )
 
 
@@ -222,9 +232,9 @@ if pdf is not None and ke:
 
     try:
 
-        # --------------------------------------------------------
+        # ========================================================
         # LEER PDF
-        # --------------------------------------------------------
+        # ========================================================
 
         pdf_reader = PdfReader(pdf)
 
@@ -238,36 +248,40 @@ if pdf is not None and ke:
                 text += page_text + "\n"
 
 
-        # --------------------------------------------------------
-        # INFORMACIÓN DEL DOCUMENTO
-        # --------------------------------------------------------
-
-        st.success(
-            f"✅ PDF cargado correctamente: **{pdf.name}**"
-        )
-
-        st.info(
-            f"📊 Texto extraído: {len(text):,} caracteres"
-        )
-
-
-        # --------------------------------------------------------
-        # COMPROBAR SI EL PDF TIENE TEXTO
-        # --------------------------------------------------------
+        # ========================================================
+        # COMPROBAR TEXTO
+        # ========================================================
 
         if not text.strip():
 
             st.error(
-                "❌ No se pudo extraer texto de este PDF. "
-                "Puede que sea un documento escaneado o esté protegido."
+                "❌ No se pudo extraer texto de este PDF."
+            )
+
+            st.info(
+                "El archivo puede ser un documento escaneado "
+                "o estar protegido."
             )
 
             st.stop()
 
 
-        # --------------------------------------------------------
-        # DIVIDIR TEXTO
-        # --------------------------------------------------------
+        # ========================================================
+        # INFORMACIÓN DEL DOCUMENTO
+        # ========================================================
+
+        st.success(
+            f"✅ PDF cargado: **{pdf.name}**"
+        )
+
+        st.info(
+            f"📊 Se extrajeron {len(text):,} caracteres."
+        )
+
+
+        # ========================================================
+        # DIVIDIR TEXTO EN FRAGMENTOS
+        # ========================================================
 
         text_splitter = CharacterTextSplitter(
             separator="\n",
@@ -278,15 +292,14 @@ if pdf is not None and ke:
 
         chunks = text_splitter.split_text(text)
 
-
         st.success(
             f"🧩 Documento dividido en {len(chunks)} fragmentos."
         )
 
 
-        # --------------------------------------------------------
-        # CREAR EMBEDDINGS
-        # --------------------------------------------------------
+        # ========================================================
+        # CREAR EMBEDDINGS Y BASE DE DATOS
+        # ========================================================
 
         with st.spinner("🧠 Analizando el documento..."):
 
@@ -297,14 +310,13 @@ if pdf is not None and ke:
                 embeddings
             )
 
-
         st.success(
             "📚 Documento listo para responder preguntas."
         )
 
 
         # ========================================================
-        # PREGUNTAS
+        # PREGUNTA
         # ========================================================
 
         st.divider()
@@ -325,11 +337,12 @@ if pdf is not None and ke:
         # PROCESAR PREGUNTA
         # ========================================================
 
-        if user_question:
+        if user_question.strip():
 
-            with st.spinner("🔍 Buscando información en el PDF..."):
+            with st.spinner(
+                "🔍 Buscando información en el PDF..."
+            ):
 
-                # Buscar fragmentos relacionados
                 docs_with_scores = (
                     knowledge_base.similarity_search_with_score(
                         user_question,
@@ -338,51 +351,53 @@ if pdf is not None and ke:
                 )
 
 
-            # ----------------------------------------------------
-            # FILTRAR RESULTADOS
-            # ----------------------------------------------------
+            # ====================================================
+            # FILTRAR FRAGMENTOS
+            # ====================================================
 
             docs = []
 
             for doc, score in docs_with_scores:
 
-                # Menor distancia = mayor similitud
+                # En FAISS, un valor menor significa
+                # mayor similitud.
                 if score < 0.8:
+
                     docs.append(doc)
 
 
-            # ----------------------------------------------------
-            # SI NO HAY INFORMACIÓN RELACIONADA
-            # ----------------------------------------------------
+            # ====================================================
+            # NO SE ENCONTRÓ INFORMACIÓN SUFICIENTE
+            # ====================================================
 
             if not docs:
 
                 st.warning(
-                    "⚠️ Esta pregunta no parece estar relacionada "
-                    "con el contenido del PDF."
+                    "⚠️ No encontré información relacionada "
+                    "con esa pregunta dentro del PDF."
                 )
 
                 st.info(
-                    "💡 Intenta realizar una pregunta sobre la "
-                    "información que aparece en el documento."
+                    "💡 Intenta formular una pregunta sobre "
+                    "el contenido del documento."
                 )
 
 
-            # ----------------------------------------------------
-            # SI ENCUENTRA INFORMACIÓN
-            # ----------------------------------------------------
+            # ====================================================
+            # SE ENCONTRÓ INFORMACIÓN
+            # ====================================================
 
             else:
 
                 st.success(
-                    f"🔎 Se encontraron {len(docs)} fragmentos "
+                    f"🔎 Encontré {len(docs)} fragmentos "
                     "relacionados con tu pregunta."
                 )
 
 
-                # ------------------------------------------------
+                # =================================================
                 # MODELO DE OPENAI
-                # ------------------------------------------------
+                # =================================================
 
                 llm = OpenAI(
                     temperature=0,
@@ -390,9 +405,9 @@ if pdf is not None and ke:
                 )
 
 
-                # ------------------------------------------------
+                # =================================================
                 # CADENA DE PREGUNTAS Y RESPUESTAS
-                # ------------------------------------------------
+                # =================================================
 
                 chain = load_qa_chain(
                     llm,
@@ -400,37 +415,39 @@ if pdf is not None and ke:
                 )
 
 
-                # ------------------------------------------------
-                # INSTRUCCIÓN PARA LA IA
-                # ------------------------------------------------
+                # =================================================
+                # INSTRUCCIÓN
+                # =================================================
 
                 prompt = f"""
-                Responde la siguiente pregunta utilizando
-                EXCLUSIVAMENTE la información contenida en los
-                fragmentos proporcionados del PDF.
+Responde la pregunta del usuario utilizando ÚNICAMENTE
+la información contenida en los fragmentos proporcionados
+del PDF.
 
-                No utilices conocimiento externo.
+REGLAS:
 
-                No inventes información.
+1. No utilices información externa al PDF.
+2. No inventes información.
+3. No completes información utilizando conocimientos propios.
+4. Si la respuesta no aparece o no puede determinarse
+   a partir de los fragmentos proporcionados, responde:
 
-                Si los fragmentos no contienen suficiente
-                información para responder la pregunta, responde
-                exactamente:
+"No puedo responder esta pregunta porque la información
+necesaria no aparece en el PDF."
 
-                "No puedo responder esta pregunta porque la
-                información necesaria no aparece en el PDF."
+Pregunta del usuario:
 
-                Pregunta del usuario:
-
-                {user_question}
-                """
+{user_question}
+"""
 
 
-                # ------------------------------------------------
+                # =================================================
                 # GENERAR RESPUESTA
-                # ------------------------------------------------
+                # =================================================
 
-                with st.spinner("🤖 Generando respuesta..."):
+                with st.spinner(
+                    "🤖 Generando respuesta..."
+                ):
 
                     response = chain.run(
                         input_documents=docs,
@@ -438,11 +455,13 @@ if pdf is not None and ke:
                     )
 
 
-                # ------------------------------------------------
+                # =================================================
                 # MOSTRAR RESPUESTA
-                # ------------------------------------------------
+                # =================================================
 
-                st.markdown("### 💡 Respuesta")
+                st.markdown(
+                    "### 💡 Respuesta"
+                )
 
                 st.markdown(
                     f"""
@@ -454,8 +473,27 @@ if pdf is not None and ke:
                 )
 
 
+    # ============================================================
+    # MANEJO DE ERRORES
+    # ============================================================
+
+    except Exception as e:
+
+        st.error(
+            f"❌ Ocurrió un error al procesar el PDF: {str(e)}"
+        )
+
+        with st.expander("🔧 Ver detalles técnicos"):
+
+            import traceback
+
+            st.code(
+                traceback.format_exc()
+            )
+
+
 # ============================================================
-# MENSAJES INICIALES
+# SI HAY PDF PERO NO HAY API KEY
 # ============================================================
 
 elif pdf is not None and not ke:
@@ -463,6 +501,11 @@ elif pdf is not None and not ke:
     st.warning(
         "🔑 Para comenzar, primero ingresa tu clave de API de OpenAI."
     )
+
+
+# ============================================================
+# SI TODAVÍA NO HAY PDF
+# ============================================================
 
 else:
 
