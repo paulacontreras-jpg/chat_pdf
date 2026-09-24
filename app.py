@@ -254,7 +254,7 @@ if pdf is not None and ke:
 
 
         # ========================================================
-        # COMPROBAR SI SE EXTRAYO TEXTO
+        # COMPROBAR SI SE EXTRAJO TEXTO
         # ========================================================
 
         if not text.strip():
@@ -530,12 +530,6 @@ elif pdf is not None and not ke:
 # ============================================================
 # SIN PDF
 # ============================================================
-
-else:
-
-    st.info(
-        "📄 Carga un archivo PDF para comenzar."
-    )
 
 else:
 
